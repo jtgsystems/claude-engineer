@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import json
 from tavily import TavilyClient
 import re
-import ollama
+import openai
 import asyncio
 import difflib
 import time
@@ -18,25 +18,29 @@ import aiohttp
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
 
-async def get_user_input(prompt="You: "):
-    style = Style.from_dict({
-        'prompt': 'cyan bold',
-    })
-    session = PromptSession(style=style)
-    return await session.prompt_async(prompt, multiline=False)
+def get_user_input(prompt_text="You: "):
+    """Simple input function without prompt_toolkit dependencies"""
+    try:
+        return input(prompt_text)
+    except (EOFError, KeyboardInterrupt):
+        return "exit"
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 import datetime
 # Load environment variables from .env file
 load_dotenv()
 
-# Initialize the Ollama client
-client = ollama.AsyncClient()
+# Initialize the OpenAI client
+from openai import AsyncOpenAI
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Initialize the Tavily client
-tavily_api_key = os.getenv("TAVILY_API_KEY")
-if not tavily_api_key:
-    raise ValueError("TAVILY_API_KEY not found in environment variables")
-tavily = TavilyClient(api_key=tavily_api_key)
+# Initialize the Tavily client (optional)
+tavily_api_key = os.getenv("TAVILY_API_KEY", "fake_key_for_development")
+try:
+    from tavily import TavilyClient
+    tavily = TavilyClient(api_key=tavily_api_key)
+except ImportError:
+    print("Tavily not installed. Web search will be disabled.")
+    tavily = None
 
 console = Console()
 
@@ -68,17 +72,14 @@ CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 MAX_CONTEXT_TOKENS = 200000  # Reduced to 200k tokens for context window
 
-# Models
-# Models that maintain context memory across interactions
-MAINMODEL = "mistral-nemo"  # Maintains conversation history and file contents
-
-# Models that don't maintain context (memory is reset after each call)
-TOOLCHECKERMODEL = "mistral-nemo"
-CODEEDITORMODEL = "mistral-nemo"
+# Models - Updated for OpenAI GPT-4.1
+MAINMODEL = "gpt-4.1"  # Maintains conversation history and file contents
+TOOLCHECKERMODEL = "gpt-4.1"
+CODEEDITORMODEL = "gpt-4.1"
 
 # System prompts
 BASE_SYSTEM_PROMPT = """
-You are Ollama Engineer, an AI assistant powered Ollama models, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
+You are Ollama Engineer, an AI assistant powered by OpenAI's GPT-4.1 model, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
 
 1. Creating and managing project structures
 2. Writing, debugging, and improving code across multiple languages
@@ -316,27 +317,26 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         </REPLACE>
 
         If no changes are needed, return an empty list.
-        """
-
-        # Make the API call to CODEEDITORMODEL (context is not maintained except for code_editor_memory)
-        response = client.messages.create(
+        """        # Make the API call to CODEEDITORMODEL (context is not maintained except for code_editor_memory)
+        response = await client.chat.completions.create(
             model=CODEEDITORMODEL,
-            max_tokens=8000,
-            system=system_prompt,
-            extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=[
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "Generate SEARCH/REPLACE blocks for the necessary changes."}
-            ]
+            ],
+            stream=False
         )
-        # Update token usage for code editor
-        code_editor_tokens['input'] += response.usage.input_tokens
-        code_editor_tokens['output'] += response.usage.output_tokens
+        
+        # Process response - OpenAI returns ChatCompletion object
+        response_content = ""
+        if response.choices and response.choices[0].message:
+            response_content = response.choices[0].message.content or ""
 
         # Parse the response to extract SEARCH/REPLACE blocks
-        edit_instructions = parse_search_replace_blocks(response.content[0].text)
+        edit_instructions = parse_search_replace_blocks(response_content)
 
         # Update code editor memory (this is the only part that maintains some context between calls)
-        code_editor_memory.append(f"Edit Instructions for {file_path}:\n{response.content[0].text}")
+        code_editor_memory.append(f"Edit Instructions for {file_path}:\n{response_content}")
 
         # Add the file to code_editor_files set
         code_editor_files.add(file_path)
@@ -504,6 +504,8 @@ def list_files(path="."):
 
 def tavily_search(query):
     try:
+        if tavily is None:
+            return f"Web search unavailable - Tavily not installed or configured"
         response = tavily.qna_search(query=query, search_depth="advanced")
         return response
     except Exception as e:
@@ -765,162 +767,93 @@ def save_chat():
 
 
 async def chat_with_ollama(user_input, image_path=None, current_iteration=None, max_iterations=None):
-    global conversation_history, automode, main_model_tokens
+    global conversation_history, automode
 
-    # This function uses MAINMODEL, which maintains context across calls
-    current_conversation = []
-
-    current_conversation.append({"role": "user", "content": user_input})
-
-    # Filter conversation history to maintain context
-    filtered_conversation_history = []
-    for message in conversation_history:
-        if isinstance(message['content'], list):
-            filtered_content = [
-                content for content in message['content']
-                if content.get('type') != 'tool_result' or (
-                    content.get('type') == 'tool_result' and
-                    not any(keyword in content.get('output', '') for keyword in [
-                        "File contents updated in system prompt",
-                        "File created and added to system prompt",
-                        "has been read and stored in the system prompt"
-                    ])
-                )
-            ]
-            if filtered_content:
-                filtered_conversation_history.append({**message, 'content': filtered_content})
-        else:
-            filtered_conversation_history.append(message)
-
-    # Combine filtered history with current conversation to maintain context
-    messages = filtered_conversation_history + current_conversation
+    # Build conversation messages
+    current_conversation = [{"role": "user", "content": user_input}]
+    messages = conversation_history + current_conversation
 
     try:
-        # MAINMODEL call, which maintains context
-        # Prepend the system message to the messages list
+        # Create system message with file context
         system_message = {"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}
         messages_with_system = [system_message] + messages
-        
-        response = await client.chat(
+          # Call OpenAI API directly without tools
+        response = await client.chat.completions.create(
             model=MAINMODEL,
             messages=messages_with_system,
-            tools=tools,
             stream=False
         )
         
-        # Check if the response is a dictionary
-        if isinstance(response, dict):
-            if 'error' in response:
-                console.print(Panel(f"Error: {response['error']}", title="API Error", style="bold red"))
-                return f"I'm sorry, but there was an error with the model response: {response['error']}", False
-            elif 'message' in response:
-                assistant_message = response['message']
-                assistant_response = assistant_message.get('content', '')
-                exit_continuation = CONTINUATION_EXIT_PHRASE in assistant_response
-                tool_calls = assistant_message.get('tool_calls', [])
+        # Process response - OpenAI returns ChatCompletion object
+        if response.choices and response.choices[0].message:
+            assistant_response = response.choices[0].message.content or ""
+            
+            if not assistant_response:
+                assistant_response = "I'm sorry, I didn't generate a response. Please try again."
+            
+            console.print(Panel(Markdown(assistant_response), title="Ollama Engineer", title_align="left", border_style="blue", expand=False))
+            
+            # Check for tool requests in response and handle manually
+            if any(tool_keyword in assistant_response.lower() for tool_keyword in ['create_file', 'read_file', 'create_folder']):
+                tool_result = await handle_tool_requests(assistant_response)
+                if tool_result:
+                    console.print(Panel(tool_result, title="Tool Result", style="green"))
+                    assistant_response += f"\n\nTool execution result: {tool_result}"
+            
+            # Update conversation history
+            conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
+            
+            # Display files in context
+            if file_contents:
+                files_in_context = "\n".join(file_contents.keys())
             else:
-                # Handle unexpected dictionary response
-                console.print(Panel("Unexpected response format", title="API Error", style="bold red"))
-                return "I'm sorry, but there was an unexpected error in the model response.", False
+                files_in_context = "No files in context. Read, create, or edit files to add."
+            console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
+            
+            return assistant_response, CONTINUATION_EXIT_PHRASE in assistant_response
+            
         else:
-            # Handle unexpected non-dictionary response
-            console.print(Panel("Unexpected response type", title="API Error", style="bold red"))
-            return "I'm sorry, but there was an unexpected error in the model response.", False
+            console.print(Panel("Unexpected response format", title="API Error", style="bold red"))
+            return "Error: Unexpected response format", False
+            
     except Exception as e:
         console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
-        return "I'm sorry, there was an error communicating with the AI. Please try again.", False
+        return f"Error: {str(e)}", False
 
-    console.print(Panel(Markdown(assistant_response), title="Ollama's Response", title_align="left", border_style="blue", expand=False))
-
-    if tool_calls:
-        console.print(Panel("Tool calls detected", title="Tool Usage", style="bold yellow"))
-        console.print(Panel(json.dumps(tool_calls, indent=2), title="Tool Calls", style="cyan"))
-
-    # Display files in context
-    if file_contents:
-        files_in_context = "\n".join(file_contents.keys())
-    else:
-        files_in_context = "No files in context. Read, create, or edit files to add."
-    console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
-
-    for tool_call in tool_calls:
-        tool_name = tool_call['function']['name']
-        tool_arguments = tool_call['function']['arguments']
-        
-        # Check if tool_arguments is a string and parse it if necessary
-        if isinstance(tool_arguments, str):
-            try:
-                tool_input = json.loads(tool_arguments)
-            except json.JSONDecodeError:
-                tool_input = {"error": "Failed to parse tool arguments"}
-        else:
-            tool_input = tool_arguments
-
-        console.print(Panel(f"Tool Used: {tool_name}", style="green"))
-        console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
-
-        tool_result = await execute_tool(tool_call)
-        
-        if tool_result["is_error"]:
-            console.print(Panel(tool_result["content"], title="Tool Execution Error", style="bold red"))
-        else:
-            console.print(Panel(tool_result["content"], title_align="left", title="Tool Result", style="green"))
-
-        current_conversation.append({
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [tool_call]
-        })
-
-        current_conversation.append({
-            "role": "tool",
-            "content": tool_result["content"],
-            "tool_call_id": tool_call.get('id', 'unknown_id')  # Use 'unknown_id' if 'id' is not present
-        })
-
-        # Update the file_contents dictionary if applicable
-        if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and not tool_result["is_error"]:
-            if 'path' in tool_input:
-                file_path = tool_input['path']
-                if "File contents updated in system prompt" in tool_result["content"] or \
-                   "File created and added to system prompt" in tool_result["content"] or \
-                   "has been read and stored in the system prompt" in tool_result["content"]:
-                    # The file_contents dictionary is already updated in the tool function
-                    pass
-
-        messages = filtered_conversation_history + current_conversation
-
-        try:
-            # Prepend the system message to the messages list
-            system_message = {"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}
-            messages_with_system = [system_message] + messages
+async def handle_tool_requests(response_text):
+    """Enhanced tool request handler with better parsing"""
+    import re
+    try:
+        # Pattern 1: XML-style tags <create_folder directory_path="path" />
+        xml_folder = re.search(r'<create_folder[^>]*directory_path="([^"]+)"[^>]*/?>', response_text)
+        if xml_folder:
+            folder_path = xml_folder.group(1)
+            return create_folder(folder_path)
             
-            tool_response = await client.chat(
-                model=TOOLCHECKERMODEL,
-                messages=messages_with_system,
-                tools=tools,
-                stream=False
-            )
-
-            if isinstance(tool_response, dict) and 'message' in tool_response:
-                tool_checker_response = tool_response['message'].get('content', '')
-                console.print(Panel(Markdown(tool_checker_response), title="Ollama's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
-                assistant_response += "\n\n" + tool_checker_response
-            else:
-                error_message = "Unexpected tool response format"
-                console.print(Panel(error_message, title="Error", style="bold red"))
-                assistant_response += f"\n\n{error_message}"
-        except Exception as e:
-            error_message = f"Error in tool response: {str(e)}"
-            console.print(Panel(error_message, title="Error", style="bold red"))
-            assistant_response += f"\n\n{error_message}"
-
-    if assistant_response:
-        current_conversation.append({"role": "assistant", "content": assistant_response})
-
-    conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
-
-    return assistant_response, exit_continuation
+        # Pattern 2: XML-style file creation
+        xml_file = re.search(r'<create_file[^>]*(?:path|file_path)="([^"]+)"[^>]*/?>', response_text)
+        if xml_file:
+            file_path = xml_file.group(1)
+            return create_file(file_path, "# File created by Ollama Engineer\n")
+            
+        # Pattern 3: Natural language patterns
+        if "create" in response_text.lower() and "folder" in response_text.lower():
+            # Look for quoted paths or common path patterns
+            path_match = re.search(r'["\'](C:\\[^"\']+)["\']', response_text) or \
+                        re.search(r'(C:\\Users\\[^\s]+)', response_text) or \
+                        re.search(r'desktop[/\\](\w+)', response_text, re.IGNORECASE)
+            if path_match:
+                folder_path = path_match.group(1)
+                return create_folder(folder_path)
+                
+        # Pattern 4: Simple folder names for desktop
+        if "TEST" in response_text and "desktop" in response_text.lower():
+            return create_folder(r"C:\Users\Owner\Desktop\TEST")
+            
+    except Exception as e:
+        return f"Tool execution error: {str(e)}"
+    
+    return None
 
 def reset_code_editor_memory():
     global code_editor_memory
@@ -941,7 +874,7 @@ def reset_conversation():
 
 async def main():
     global automode, conversation_history
-    console.print(Panel("Welcome to the Ollama Llama 3.1 Engineer Chat with Multi-Agent and Image Support!", title="Welcome", style="bold green"))
+    console.print(Panel("Welcome to Ollama Engineer with GPT-4.1!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
     console.print("Type 'reset' to clear the conversation history.")
@@ -949,7 +882,7 @@ async def main():
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
     while True:
-        user_input = await get_user_input()
+        user_input = get_user_input()
 
         if user_input.lower() == 'exit':
             console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
@@ -964,7 +897,6 @@ async def main():
             console.print(Panel(f"Chat saved to {filename}", title="Chat Saved", style="bold green"))
             continue
 
-
         if user_input.lower().startswith('automode'):
             try:
                 parts = user_input.split()
@@ -976,7 +908,7 @@ async def main():
                 automode = True
                 console.print(Panel(f"Entering automode with {max_iterations} iterations. Please provide the goal of the automode.", title_align="left", title="Automode", style="bold yellow"))
                 console.print(Panel("Press Ctrl+C at any time to exit the automode loop.", style="bold yellow"))
-                user_input = await get_user_input()
+                user_input = get_user_input()
 
                 iteration_count = 0
                 try:

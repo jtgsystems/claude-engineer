@@ -1,6 +1,6 @@
-# 🤖 Claude Engineer
+# 🤖 AI Engineer (GPT-4.1 Powered)
 
-Claude Engineer is an advanced interactive command-line interface (CLI) that harnesses the power of Anthropic's Claude 3 and Claude 3.5 models to assist with a wide range of software development tasks. This tool seamlessly combines the capabilities of state-of-the-art large language models with practical file system operations, web search functionality, intelligent code analysis, and execution capabilities.
+AI Engineer is an advanced interactive command-line interface (CLI) that harnesses the power of OpenAI's GPT-4.1 model to assist with a wide range of software development tasks. This tool seamlessly combines the capabilities of state-of-the-art large language models with practical file system operations, web search functionality, intelligent code analysis, and execution capabilities.
 
 ## NEW
 
@@ -30,7 +30,7 @@ pip install --upgrade anthropic
 
 ## ✨ Features
 
-- 💬 Interactive chat interface with Claude 3 and Claude 3.5 models
+- 💬 Interactive chat interface with OpenAI GPT-4.1 model
 - 📁 Comprehensive file system operations (create folders, files, read/write files)
 - 🔍 Web search capabilities using Tavily API for up-to-date information
 - 🌈 Enhanced syntax highlighting for code snippets
@@ -59,8 +59,8 @@ pip install --upgrade anthropic
 
 1. Clone this repository:
    ```
-   git clone https://github.com/doriandarko/claude-engineer.git
-   cd claude-engineer
+   git clone https://github.com/your-username/ai-engineer-gpt4.git
+   cd ai-engineer-gpt4
    ```
 
 2. Install the required dependencies:
@@ -72,7 +72,7 @@ pip install --upgrade anthropic
    - Create a `.env` file in the project root directory
    - Add the following environment variables:
      ```
-     ANTHROPIC_API_KEY=your_anthropic_api_key
+     OPENAI_API_KEY=your_openai_api_key_here
      TAVILY_API_KEY=your_tavily_api_key
      ```
 
@@ -119,13 +119,13 @@ The code_execution_env virtual environment will be used for all code execution t
 
 ## 🚀 Usage
 
-Run the main script to start the Claude Engineer interface:
+Run the main script to start the AI Engineer interface:
 
 ```
-python main.py
+python Ai.py
 ```
 
-Once started, you can interact with Claude Engineer by typing your queries or commands. Some example interactions:
+Once started, you can interact with AI Engineer by typing your queries or commands. Some example interactions:
 
 - "Create a new Python project structure for a web application"
 - "Explain the code in file.py and suggest improvements"
@@ -143,13 +143,13 @@ Special commands:
 - Type 'save chat' to save the current chat log.
 - Press Ctrl+C at any time to exit the automode and return to regular chat.
 
-After each interaction, Claude Engineer will display:
+After each interaction, AI Engineer will display:
 - Token usage (input, output, and total) for the current model
 - Remaining context window size
 
 ### Code Execution and Process Management
 
-Claude Engineer now supports executing code in an isolated 'code_execution_env' virtual environment:
+AI Engineer now supports executing code in an isolated 'code_execution_env' virtual environment:
 
 1. Use the `execute_code` tool to run Python code safely in the isolated environment.
 2. Long-running processes can be managed using the process ID returned by `execute_code`.
@@ -157,42 +157,41 @@ Claude Engineer now supports executing code in an isolated 'code_execution_env' 
 
 ### Using Different AI Models
 
-Claude Engineer utilizes multiple specialized AI models:
+AI Engineer utilizes multiple specialized AI models based on OpenAI's GPT-4.1:
 
-- MAINMODEL: Claude 3 or Claude 3.5 for general interactions
-- TOOLCHECKERMODEL: Validates tool usage and outputs
-- CODEEDITORMODEL: Performs specialized code editing tasks
-- CODEEXECUTIONMODEL: Analyzes code execution results
+- MAINMODEL: GPT-4.1 for general interactions
+- TOOLCHECKERMODEL: GPT-4.1 for validating tool usage and outputs
+- CODEEDITORMODEL: GPT-4.1 for performing specialized code editing tasks
 
-The script automatically selects the appropriate model based on the task.
+The script automatically selects the appropriate model configuration based on the task.
 
 ### 🤖 Improved Automode
 
-The enhanced automode allows Claude to work autonomously on complex tasks with greater efficiency and control. When in automode:
+The enhanced automode allows AI Engineer to work autonomously on complex tasks with greater efficiency and control. When in automode:
 
-1. Claude sets clear, achievable goals based on your request.
+1. AI Engineer sets clear, achievable goals based on your request.
 2. It works through these goals one by one, using available tools as needed.
-3. Claude provides regular updates on its progress, including the current iteration count.
+3. AI Engineer provides regular updates on its progress, including the current iteration count.
 4. Automode continues until goals are completed or the maximum number of iterations is reached.
 5. You can specify the maximum number of iterations when entering automode (default is 25).
-6. Claude dynamically adjusts its approach based on progress and obstacles encountered.
+6. AI Engineer dynamically adjusts its approach based on progress and obstacles encountered.
 7. The TOOLCHECKERMODEL validates tool usage and outputs for increased reliability.
 
 To use automode:
 1. Type 'automode number' when prompted for input, where number is the maximum number of iterations.
 2. Provide your request when prompted.
-3. Claude will work autonomously, providing updates after each iteration.
+3. AI Engineer will work autonomously, providing updates after each iteration.
 4. Automode exits when the task is completed, after reaching the maximum number of iterations, or when you press Ctrl+C.
 
 ### 📊 Enhanced Diff-based File Editing
 
-Claude Engineer now supports an improved diff-based file editing system, allowing for more precise and controlled modifications to existing files. The new workflow includes:
+AI Engineer now supports an improved diff-based file editing system, allowing for more precise and controlled modifications to existing files. The new workflow includes:
 
 1. Reading the entire content of a file using the `edit_and_apply` function without providing new content.
 2. Applying changes to the file using the `edit_and_apply` function with new content, which shows a detailed diff of the proposed changes.
 3. Utilizing the CODEEDITORMODEL for specialized code editing tasks, ensuring high-quality modifications.
 
-When editing files, Claude will:
+When editing files, AI Engineer will:
 
 1. Show a detailed diff of the proposed changes, highlighting additions, removals, and unchanged lines with color coding using the Rich library.
 2. Focus on adding new code or modifying existing code without unnecessarily removing functionality.
@@ -201,22 +200,22 @@ When editing files, Claude will:
 5. Support various editing scenarios, including targeted changes, appending content, inserting at the beginning, and replacing entire file contents.
 6. Use the CODEEDITORMODEL to ensure code changes adhere to best practices and maintain consistency.
 
-This feature enhances Claude's ability to make targeted improvements to your codebase while maintaining the integrity of existing functionality.
+This feature enhances AI Engineer's ability to make targeted improvements to your codebase while maintaining the integrity of existing functionality.
 
 ### 🧠 Dynamic System Prompt
 
 The system prompt is now dynamically updated based on whether the script is in automode or not. This allows for more tailored instructions and behavior depending on the current operating mode:
 
-1. In regular mode, Claude focuses on providing helpful responses and using tools as needed.
-2. In automode, Claude is instructed to work autonomously, set goals, and provide regular updates on progress.
-3. The system prompt adapts to the specific task at hand, optimizing Claude's performance for each scenario.
+1. In regular mode, AI Engineer focuses on providing helpful responses and using tools as needed.
+2. In automode, AI Engineer is instructed to work autonomously, set goals, and provide regular updates on progress.
+3. The system prompt adapts to the specific task at hand, optimizing AI Engineer's performance for each scenario.
 4. The system prompt now includes file context for enhanced token management.
 
-The dynamic system prompt enhances Claude's ability to adapt to different scenarios and provide more relevant assistance.
+The dynamic system prompt enhances AI Engineer's ability to adapt to different scenarios and provide more relevant assistance.
 
 ### 📊 Token Management and Visualization
 
-Claude Engineer now features improved token management and visualization:
+AI Engineer now features improved token management and visualization:
 
 1. Enhanced token management using file context in the system prompt.
 2. Improved token visualization using a table format.
@@ -227,7 +226,7 @@ These improvements provide better insights into token usage and help manage conv
 
 ### 🔧 Available Tools
 
-Claude Engineer comes with a set of powerful tools to assist with various tasks:
+AI Engineer comes with a set of powerful tools to assist with various tasks:
 
 1. create_folder: Create a new folder at a specified path.
 2. create_file: Create a new file at a specified path with content.
@@ -242,22 +241,22 @@ Claude Engineer comes with a set of powerful tools to assist with various tasks:
 11. CODEEDITORMODEL: Perform specialized code editing tasks with high precision.
 12. CODEEXECUTIONMODEL: Analyze code execution results and provide insights.
 
-These tools allow Claude to interact with the file system, manage project structures, gather information from the web, perform advanced code editing, and execute code safely.
+These tools allow AI Engineer to interact with the file system, manage project structures, gather information from the web, perform advanced code editing, and execute code safely.
 
 ### 🖼️ Image Analysis
 
-Claude Engineer now supports image analysis capabilities. To use this feature:
+AI Engineer now supports image analysis capabilities. To use this feature:
 
 1. Type 'image' when prompted for input.
 2. Drag and drop your image file into the terminal or provide the file path.
 3. Provide a prompt or question about the image.
-4. Claude will analyze the image and respond to your query.
+4. AI Engineer will analyze the image and respond to your query.
 
-This feature enables Claude to assist with tasks involving visual data, such as analyzing diagrams, screenshots, or any other images relevant to your development work.
+This feature enables AI Engineer to assist with tasks involving visual data, such as analyzing diagrams, screenshots, or any other images relevant to your development work.
 
 ### 🛡️ Error Handling and Recovery
 
-Claude Engineer implements robust error handling and recovery mechanisms:
+AI Engineer implements robust error handling and recovery mechanisms:
 
 1. Graceful handling of API errors and network issues.
 2. Automatic retries for transient failures.
@@ -270,7 +269,7 @@ These features ensure a smooth and reliable user experience, even in the face of
 
 ### 💾 Chat Log Saving
 
-You can save the current chat log at any time during your interaction with Claude Engineer:
+You can save the current chat log at any time during your interaction with AI Engineer:
 
 1. Type 'save' when prompted for input.
 2. The chat log will be saved to a file in the current directory with a timestamp in the filename.
@@ -278,12 +277,11 @@ You can save the current chat log at any time during your interaction with Claud
 
 ## 🧠 AI Models and Specialized Agents
 
-Claude Engineer utilizes multiple AI models to provide specialized functionality:
+AI Engineer utilizes multiple configurations of OpenAI's GPT-4.1 model to provide specialized functionality:
 
-1. MAINMODEL (Claude 3 or Claude 3.5): Handles general interactions and task processing.
-2. TOOLCHECKERMODEL: Validates the usage and outputs of various tools to ensure reliability.
-3. CODEEDITORMODEL: Specializes in code editing tasks, ensuring high-quality modifications.
-4. CODEEXECUTIONMODEL: Analyzes code execution results and provides insights.
+1. MAINMODEL (GPT-4.1): Handles general interactions and task processing.
+2. TOOLCHECKERMODEL (GPT-4.1): Validates the usage and outputs of various tools to ensure reliability.
+3. CODEEDITORMODEL (GPT-4.1): Specializes in code editing tasks, ensuring high-quality modifications.
 
 These models work together to provide a comprehensive and intelligent development assistance experience.
 
@@ -323,12 +321,10 @@ graph TD
         S[File Contents]
         T[Code Editor Memory]
     end
-    
-    subgraph Models
-        U[MAINMODEL - Claude-3.5-Sonnet]
-        V[TOOLCHECKERMODEL - Claude-3.5-Sonnet]
-        W[CODEEDITORMODEL - Claude-3.5-Sonnet]
-        X[CODEEXECUTIONMODEL - Claude-3-Haiku]
+      subgraph Models
+        U[MAINMODEL - GPT-4.1]
+        V[TOOLCHECKERMODEL - GPT-4.1]
+        W[CODEEDITORMODEL - GPT-4.1]
     end
     
     subgraph Tools
@@ -345,11 +341,9 @@ graph TD
     
     J --> R
     J --> S
-    J --> T
-    J --> U
+    J --> T    J --> U
     O --> V
     AA --> W
-    AB --> X
     M --> Y
     M --> Z
     M --> AA
@@ -365,30 +359,6 @@ graph TD
 ## 👥 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-## 🦙 Ollama eng is here
-
-You can now have the power of this script, completely locally using Ollama and any of the supported function calling models:
-Llama 3.1
-Mistral Nemo
-Firefunction v2
-Command-R +
-
-Before running make sure you install the latest version of the Ollama app and 
-
-```
-pip install ollama
-```
-
-Then
-
-```
-python ollama-eng.py
-```
-
-### 🚨Important note on safety when using Ollama Engineer!
-
-Be extra careful if you ever let these local models run code on your machine, especially using the executing code tool. It may brick your machine. I disabled the tool execution completely for OLLAMA engineer but if you want to implement it again based on the original script use at your own discretion.
 
 ## Star History
 

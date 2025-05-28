@@ -1,8 +1,7 @@
-anthropic
+openai
 python-dotenv
 tavily-python
 Pillow
-anthropic
 rich
 prompt_toolkit
 pydub

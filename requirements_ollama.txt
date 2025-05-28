@@ -1,0 +1,21 @@
+# Claude Engineer v3 + Ollama Requirements
+
+## Core Dependencies
+rich>=13.0.0
+prompt-toolkit>=3.0.36
+python-dotenv>=1.0.0
+ollama>=0.3.0
+
+## Tool Dependencies (Optional - Install as needed)
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+selenium>=4.15.0
+duckduckgo-search>=3.9.0
+Pillow>=10.0.0
+# e2b-code-executor>=0.1.0  # Optional - install manually if needed
+
+## Development Dependencies
+pytest>=7.4.0
+black>=23.0.0
+ruff>=0.1.0
