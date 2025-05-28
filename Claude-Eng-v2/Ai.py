@@ -208,7 +208,7 @@ def create_folder(path):
 def create_file(path, content=""):
     global file_contents
     try:
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
         file_contents[path] = content
         return f"File created and added to system prompt: {path}"
@@ -231,7 +231,7 @@ def generate_and_apply_diff(original_content, new_content, path):
         return "No changes detected."
 
     try:
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.writelines(new_content)
 
         diff_text = ''.join(diff)
@@ -368,9 +368,8 @@ def parse_search_replace_blocks(response_text):
 async def edit_and_apply(path, instructions, project_context, is_automode=False, max_retries=3):
     global file_contents
     try:
-        original_content = file_contents.get(path, "")
-        if not original_content:
-            with open(path, 'r') as file:
+        original_content = file_contents.get(path, "")        if not original_content:
+            with open(path, 'r', encoding='utf-8') as file:
                 original_content = file.read()
             file_contents[path] = original_content
 
@@ -477,7 +476,7 @@ def generate_diff(original, new, path):
 def read_file(path):
     global file_contents
     try:
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
         file_contents[path] = content
         return f"File '{path}' has been read and stored in the system prompt."
@@ -860,13 +859,13 @@ tools = [
 
 from typing import Dict, Any
 
-async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
+async def execute_tool(tool_call) -> Dict[str, Any]:
     tool_name = "unknown"  # Initialize tool_name to avoid scoping issues
     
     try:
-        function_call = tool_call['function']
-        tool_name = function_call['name']
-        tool_arguments = function_call['arguments']
+        function_call = tool_call.function
+        tool_name = function_call.name
+        tool_arguments = function_call.arguments
         
         # Check if tool_arguments is a string and parse it if necessary
         if isinstance(tool_arguments, str):
