@@ -861,11 +861,14 @@ tools = [
 from typing import Dict, Any
 
 async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
+    tool_name = "unknown"  # Initialize tool_name to avoid scoping issues
+    
     try:
         function_call = tool_call['function']
         tool_name = function_call['name']
         tool_arguments = function_call['arguments']
-          # Check if tool_arguments is a string and parse it if necessary
+        
+        # Check if tool_arguments is a string and parse it if necessary
         if isinstance(tool_arguments, str):
             try:
                 tool_input = json.loads(tool_arguments)
