@@ -17,6 +17,8 @@ import asyncio
 import aiohttp
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
+import subprocess
+import sys
 
 def get_user_input(prompt_text="You: "):
     """Simple input function without prompt_toolkit dependencies"""
@@ -79,7 +81,7 @@ CODEEDITORMODEL = "gpt-4.1"
 
 # System prompts
 BASE_SYSTEM_PROMPT = """
-You are Ollama Engineer, an AI assistant powered by OpenAI's GPT-4.1 model, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
+You are AI Engineer, an AI assistant powered by OpenAI's GPT-4.1 model, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
 
 1. Creating and managing project structures
 2. Writing, debugging, and improving code across multiple languages
@@ -740,19 +742,19 @@ def save_chat():
     filename = f"Chat_{now.strftime('%H%M')}.md"
     
     # Format conversation history
-    formatted_chat = "# Claude-3-Sonnet Engineer Chat Log\n\n"
+    formatted_chat = "# AI Engineer Chat Log\n\n"
     for message in conversation_history:
         if message['role'] == 'user':
             formatted_chat += f"## User\n\n{message['content']}\n\n"
         elif message['role'] == 'assistant':
             if isinstance(message['content'], str):
-                formatted_chat += f"## Claude\n\n{message['content']}\n\n"
+                formatted_chat += f"## AI Engineer\n\n{message['content']}\n\n"
             elif isinstance(message['content'], list):
                 for content in message['content']:
                     if content['type'] == 'tool_use':
                         formatted_chat += f"### Tool Use: {content['name']}\n\n```json\n{json.dumps(content['input'], indent=2)}\n```\n\n"
                     elif content['type'] == 'text':
-                        formatted_chat += f"## Claude\n\n{content['text']}\n\n"
+                        formatted_chat += f"## AI Engineer\n\n{content['text']}\n\n"
         elif message['role'] == 'user' and isinstance(message['content'], list):
             for content in message['content']:
                 if content['type'] == 'tool_result':
@@ -777,40 +779,85 @@ async def chat_with_ollama(user_input, image_path=None, current_iteration=None, 
         # Create system message with file context
         system_message = {"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}
         messages_with_system = [system_message] + messages
-          # Call OpenAI API directly without tools
+        
+        # Call OpenAI API with tools
         response = await client.chat.completions.create(
             model=MAINMODEL,
             messages=messages_with_system,
+            tools=tools,
+            tool_choice="auto",
             stream=False
         )
         
         # Process response - OpenAI returns ChatCompletion object
         if response.choices and response.choices[0].message:
-            assistant_response = response.choices[0].message.content or ""
+            message = response.choices[0].message
+            assistant_response = message.content or ""
             
-            if not assistant_response:
-                assistant_response = "I'm sorry, I didn't generate a response. Please try again."
-            
-            console.print(Panel(Markdown(assistant_response), title="Ollama Engineer", title_align="left", border_style="blue", expand=False))
-            
-            # Check for tool requests in response and handle manually
-            if any(tool_keyword in assistant_response.lower() for tool_keyword in ['create_file', 'read_file', 'create_folder']):
-                tool_result = await handle_tool_requests(assistant_response)
-                if tool_result:
-                    console.print(Panel(tool_result, title="Tool Result", style="green"))
-                    assistant_response += f"\n\nTool execution result: {tool_result}"
-            
-            # Update conversation history
-            conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
-            
-            # Display files in context
-            if file_contents:
-                files_in_context = "\n".join(file_contents.keys())
+            # Handle tool calls if present
+            if message.tool_calls:
+                # Add assistant message with tool calls to conversation
+                conversation_history = messages + [{"role": "assistant", "content": assistant_response, "tool_calls": message.tool_calls}]
+                
+                # Execute tools and collect results
+                tool_responses = []
+                for tool_call in message.tool_calls:
+                    tool_result = await execute_tool(tool_call)
+                    tool_responses.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "content": str(tool_result["content"])
+                    })
+                    
+                    # Display tool result
+                    style = "red" if tool_result.get("is_error") else "green"
+                    console.print(Panel(str(tool_result["content"]), title=f"Tool: {tool_call.function.name}", style=style))
+                
+                # Add tool responses to conversation
+                conversation_history.extend(tool_responses)
+                
+                # Get final response after tool execution
+                final_response = await client.chat.completions.create(
+                    model=MAINMODEL,
+                    messages=[system_message] + conversation_history,
+                    stream=False
+                )
+                
+                if final_response.choices and final_response.choices[0].message:
+                    final_assistant_response = final_response.choices[0].message.content or ""
+                    console.print(Panel(Markdown(final_assistant_response), title="AI Engineer", title_align="left", border_style="blue", expand=False))
+                    
+                    # Update conversation history with final response
+                    conversation_history.append({"role": "assistant", "content": final_assistant_response})
+                    
+                    # Display files in context
+                    if file_contents:
+                        files_in_context = "\n".join(file_contents.keys())
+                    else:
+                        files_in_context = "No files in context. Read, create, or edit files to add."
+                    console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
+                    
+                    return final_assistant_response, CONTINUATION_EXIT_PHRASE in final_assistant_response
+                else:
+                    return "Tool execution completed", False
             else:
-                files_in_context = "No files in context. Read, create, or edit files to add."
-            console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
-            
-            return assistant_response, CONTINUATION_EXIT_PHRASE in assistant_response
+                # No tool calls, just regular response
+                if not assistant_response:
+                    assistant_response = "I'm sorry, I didn't generate a response. Please try again."
+                
+                console.print(Panel(Markdown(assistant_response), title="AI Engineer", title_align="left", border_style="blue", expand=False))
+                
+                # Update conversation history
+                conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
+                
+                # Display files in context
+                if file_contents:
+                    files_in_context = "\n".join(file_contents.keys())
+                else:
+                    files_in_context = "No files in context. Read, create, or edit files to add."
+                console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
+                
+                return assistant_response, CONTINUATION_EXIT_PHRASE in assistant_response
             
         else:
             console.print(Panel("Unexpected response format", title="API Error", style="bold red"))
@@ -874,7 +921,7 @@ def reset_conversation():
 
 async def main():
     global automode, conversation_history
-    console.print(Panel("Welcome to Ollama Engineer with GPT-4.1!", title="Welcome", style="bold green"))
+    console.print(Panel("Welcome to AI Engineer with GPT-4.1!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
     console.print("Type 'reset' to clear the conversation history.")
