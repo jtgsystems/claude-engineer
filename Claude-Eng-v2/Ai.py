@@ -865,8 +865,7 @@ async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
         function_call = tool_call['function']
         tool_name = function_call['name']
         tool_arguments = function_call['arguments']
-        
-        # Check if tool_arguments is a string and parse it if necessary
+          # Check if tool_arguments is a string and parse it if necessary
         if isinstance(tool_arguments, str):
             try:
                 tool_input = json.loads(tool_arguments)
@@ -893,7 +892,8 @@ async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
                 tool_input["instructions"],
                 tool_input["project_context"],
                 is_automode=automode
-            )        elif tool_name == "read_file":
+            )
+        elif tool_name == "read_file":
             result = read_file(tool_input["path"])
         elif tool_name == "read_multiple_files":
             result = read_multiple_files(tool_input["paths"])
