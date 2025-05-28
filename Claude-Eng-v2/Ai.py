@@ -513,6 +513,170 @@ def tavily_search(query):
     except Exception as e:
         return f"Error performing search: {str(e)}"
 
+def execute_code(code):
+    """Execute Python code in the code_execution_env virtual environment"""
+    global running_processes
+    
+    try:
+        # Path to the virtual environment
+        venv_path = "code_execution_env"
+        if os.name == 'nt':  # Windows
+            python_executable = os.path.join(venv_path, "Scripts", "python.exe")
+        else:  # Linux/Mac
+            python_executable = os.path.join(venv_path, "bin", "python")
+        
+        # Check if virtual environment exists
+        if not os.path.exists(python_executable):
+            return f"Error: Virtual environment not found at {venv_path}. Please create it first with: python -m venv {venv_path}"
+        
+        # Write code to a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(code)
+            temp_file = f.name
+        
+        try:
+            # Execute the code
+            result = subprocess.run(
+                [python_executable, temp_file],
+                capture_output=True,
+                text=True,
+                timeout=30,  # 30 second timeout
+                cwd=os.getcwd()
+            )
+            
+            output = ""
+            if result.stdout:
+                output += f"STDOUT:\n{result.stdout}\n"
+            if result.stderr:
+                output += f"STDERR:\n{result.stderr}\n"
+            if result.returncode != 0:
+                output += f"Exit code: {result.returncode}\n"
+            
+            if not output:
+                output = "Code executed successfully with no output."
+            
+            return output
+            
+        except subprocess.TimeoutExpired:
+            return "Error: Code execution timed out after 30 seconds."
+        except Exception as e:
+            return f"Error executing code: {str(e)}"
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(temp_file)
+            except:
+                pass
+                
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def execute_code_background(code):
+    """Execute Python code in background and return process ID"""
+    global running_processes
+    
+    try:
+        # Path to the virtual environment
+        venv_path = "code_execution_env"
+        if os.name == 'nt':  # Windows
+            python_executable = os.path.join(venv_path, "Scripts", "python.exe")
+        else:  # Linux/Mac
+            python_executable = os.path.join(venv_path, "bin", "python")
+        
+        # Check if virtual environment exists
+        if not os.path.exists(python_executable):
+            return f"Error: Virtual environment not found at {venv_path}. Please create it first with: python -m venv {venv_path}"
+        
+        # Write code to a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(code)
+            temp_file = f.name
+        
+        # Start process in background
+        process = subprocess.Popen(
+            [python_executable, temp_file],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=os.getcwd()
+        )
+        
+        # Store process with temp file for cleanup
+        process_id = str(process.pid)
+        running_processes[process_id] = {
+            'process': process,
+            'temp_file': temp_file,
+            'start_time': time.time()
+        }
+        
+        return f"Background process started with ID: {process_id}"
+        
+    except Exception as e:
+        return f"Error starting background process: {str(e)}"
+
+def stop_process(process_id):
+    """Stop a running process by its ID"""
+    global running_processes
+    
+    try:
+        if process_id not in running_processes:
+            return f"Process ID {process_id} not found in running processes."
+        
+        process_info = running_processes[process_id]
+        process = process_info['process']
+        temp_file = process_info['temp_file']
+        
+        # Terminate the process
+        if process.poll() is None:  # Process is still running
+            process.terminate()
+            try:
+                process.wait(timeout=5)  # Wait up to 5 seconds for graceful termination
+            except subprocess.TimeoutExpired:
+                process.kill()  # Force kill if it doesn't terminate gracefully
+                process.wait()
+        
+        # Get any remaining output
+        stdout, stderr = process.communicate()
+        
+        # Clean up temp file
+        try:
+            os.unlink(temp_file)
+        except:
+            pass
+        
+        # Remove from running processes
+        del running_processes[process_id]
+        
+        result = f"Process {process_id} stopped."
+        if stdout:
+            result += f"\nFinal STDOUT:\n{stdout}"
+        if stderr:
+            result += f"\nFinal STDERR:\n{stderr}"
+        
+        return result
+        
+    except Exception as e:
+        return f"Error stopping process {process_id}: {str(e)}"
+
+def list_running_processes():
+    """List all currently running processes"""
+    global running_processes
+    
+    if not running_processes:
+        return "No running processes."
+    
+    result = "Running processes:\n"
+    for process_id, info in running_processes.items():
+        process = info['process']
+        start_time = info['start_time']
+        runtime = time.time() - start_time
+        status = "Running" if process.poll() is None else "Finished"
+        result += f"  ID: {process_id}, Status: {status}, Runtime: {runtime:.1f}s\n"
+    
+    return result
+
 tools = [
     {
         "type": "function",
@@ -644,6 +808,51 @@ tools = [
                     }
                 },
                 "required": ["query"]
+            }        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "execute_code",
+            "description": "Execute Python code in the code_execution_env virtual environment and analyze its output",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "The Python code to execute"
+                    }
+                },
+                "required": ["code"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "stop_process",
+            "description": "Stop a running process by its ID",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "process_id": {
+                        "type": "string",
+                        "description": "The ID of the process to stop"
+                    }
+                },
+                "required": ["process_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_running_processes",
+            "description": "List all currently running processes started by execute_code",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
             }
         }
     }
@@ -684,8 +893,7 @@ async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
                 tool_input["instructions"],
                 tool_input["project_context"],
                 is_automode=automode
-            )
-        elif tool_name == "read_file":
+            )        elif tool_name == "read_file":
             result = read_file(tool_input["path"])
         elif tool_name == "read_multiple_files":
             result = read_multiple_files(tool_input["paths"])
@@ -693,6 +901,12 @@ async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
             result = list_files(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
             result = tavily_search(tool_input["query"])
+        elif tool_name == "execute_code":
+            result = execute_code(tool_input["code"])
+        elif tool_name == "stop_process":
+            result = stop_process(tool_input["process_id"])
+        elif tool_name == "list_running_processes":
+            result = list_running_processes()
         else:
             is_error = True
             result = f"Unknown tool: {tool_name}"
